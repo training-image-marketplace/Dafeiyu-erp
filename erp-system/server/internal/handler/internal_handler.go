@@ -87,6 +87,11 @@ func (h *InternalHandler) PutSwitches(c *gin.Context) {
 }
 
 // Bugs 返回缺陷清单，供平台侧渲染开关面板。
+// Menus 返回可关闭的菜单清单，平台据此渲染开关面板。
+func (h *InternalHandler) Menus(c *gin.Context) {
+	httpx.Success(c, gin.H{"list": domain.MenuSwitches})
+}
+
 func (h *InternalHandler) Bugs(c *gin.Context) {
 	httpx.Success(c, gin.H{"list": []gin.H{
 		{"code": domain.BugAmountError, "name": "金额少算 1 分", "area": "purchase/sales"},

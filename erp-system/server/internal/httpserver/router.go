@@ -334,6 +334,7 @@ func NewRouter(deps Deps) (*gin.Engine, *RouteTable, error) {
 	internal.GET("/switches", deps.Internal.GetSwitches)
 	internal.PUT("/switches", deps.Internal.PutSwitches)
 	internal.GET("/bugs", deps.Internal.Bugs)
+	internal.GET("/menus", deps.Internal.Menus)
 	internal.GET("/health", deps.Internal.Health)
 
 	if err := MountStatic(r, deps.WebDir); err != nil {

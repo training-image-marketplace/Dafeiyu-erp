@@ -13,6 +13,34 @@ const (
 	BugOrphanCustomer = "BUG-006" // 删除客户后订单仍可见（预留）
 )
 
+// MenuSwitch 是一个可被平台关闭的业务菜单。
+//
+// Code 与网关（menuCodeOfPath）拦截时用的码完全一致；平台只认这两个字段，
+// 不认识具体业务——换一个系统就换一份注册表。
+type MenuSwitch struct {
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	NameEN string `json:"name_en"`
+}
+
+// MenuSwitches 是菜单开关的注册表：菜单被关掉时对应接口直接 403。
+//
+// 这是「哪些菜单可关」的唯一真源：平台通过 GET /internal/menus 读取它来渲染
+// 勾选项，网关用 Code 做拦截。新增一个可关的菜单 = 这里加一条 + 网关映射里加资源段。
+var MenuSwitches = []MenuSwitch{
+	{Code: "goods", Name: "商品（含分类/品牌/单位）", NameEN: "Goods (incl. categories, brands, units)"},
+	{Code: "customers", Name: "客户", NameEN: "Customers"},
+	{Code: "suppliers", Name: "供应商", NameEN: "Suppliers"},
+	{Code: "warehouses", Name: "仓库", NameEN: "Warehouses"},
+	{Code: "stock", Name: "库存（含调整/调拨/盘点）", NameEN: "Stock (incl. adjustments, transfers, checks)"},
+	{Code: "reports", Name: "库存报表", NameEN: "Stock reports"},
+	{Code: "purchase", Name: "采购", NameEN: "Purchase"},
+	{Code: "sales", Name: "销售", NameEN: "Sales"},
+	{Code: "purchase_return", Name: "采购退货", NameEN: "Purchase returns"},
+	{Code: "sales_return", Name: "销售退货", NameEN: "Sales returns"},
+	{Code: "audit", Name: "审核中心", NameEN: "Audit center"},
+}
+
 // SwitchConfig 是某作用域下的一份开关配置。
 //
 // 缺失的键按「关闭」处理：默认不注入缺陷，避免新环境一上来就是坏的。

@@ -1,0 +1,52 @@
+name: dafeiyu-erp
+
+# 大肥鱼 ERP 的独立部署：一个 MySQL + 一个前后端单镜像。
+# 它不依赖实训平台；平台那边只是把这个镜像登记进镜像广场。
+
+services:
+  mysql:
+    image: mysql:8.0.43
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-23307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  erp-system:
+    build:
+      context: ../erp-system
+    restart: unless-stopped
+    environment:
+      APP_ADDR: ":8889"
+      APP_ENV: prod
+      APP_DB_HOST: mysql
+      APP_DB_PORT: "3306"
+      APP_DB_USER: root
+      APP_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      APP_DB_NAME: pt_erp
+      APP_WEB_DIR: web
+      APP_UPLOAD_DIR: /data/uploads
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:?set INTERNAL_TOKEN in .env}
+    volumes:
+      - erp-uploads:/data/uploads
+    ports:
+      - "8889:8889"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  mysql-data:
+  erp-uploads:

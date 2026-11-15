@@ -1,0 +1,3 @@
+-- 首次启动时建库。应用只跑迁移，不负责 CREATE DATABASE。
+CREATE DATABASE IF NOT EXISTS pt_erp
+  DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
