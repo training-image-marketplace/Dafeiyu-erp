@@ -1,0 +1,134 @@
+// 有问题欢迎联系 hot_kun@hotmail.com
+import type { Component } from 'svelte'
+
+import type { MenuNode } from '$lib/api/types'
+
+/**
+ * 页面模块表。
+ *
+ * 用 eager 一次性收进来，路由解析就是同步的：不用 await、不用加载态、
+ * 不会出现「点了菜单先闪一下空白」。页面数量是十几个量级时这个取舍划算；
+ * 真涨到几十个再改成懒加载（去掉 eager，配合 {#await} 渲染）。
+ *
+ * 键形如 ../pages/system/users.svelte，对应菜单里的 component = "system/users"。
+ */
+const modules = import.meta.glob('../pages/**/*.svelte', { eager: true }) as Record<
+  string,
+  { default: Component }
+>
+
+export type FlatMenu = {
+  path: string
+  titleKey: string
+  component: string
+  icon: string
+}
+
+/**
+ * 内置路由：**不来自菜单**，任何登录用户都能访问。
+ *
+ * 个人中心刻意不做成菜单项：菜单是权限管理的东西（能分配、能禁用），
+ * 而「改自己的密码」是每个账号的基本能力。做成菜单就要给它权限码，
+ * 一个没有任何权限的账号又会变回「什么都不能做」。
+ *
+ * 仪表盘在数据库里是正常菜单（排序 0、默认授权给所有角色）；这里保留
+ * 同一路径的内置兜底，给「角色后来新建、还没配菜单」的账号用。菜单里
+ * 已经有仪表盘时，app-shell 会按路径去重，不会出现两个入口。
+ *
+ * 它们参与路由与标签页的方式和菜单页完全一致，只是来源不同。
+ */
+export const builtinRoutes: FlatMenu[] = [
+  {
+    path: '/erp/dashboard',
+    titleKey: 'menu.erp.dashboard',
+    component: 'erp/dashboard',
+    icon: 'layout-dashboard',
+  },
+  { path: '/profile', titleKey: 'profile.title', component: 'profile', icon: 'user' },
+]
+
+/** 把菜单树压平成一维，只保留有页面组件的项（目录本身不可导航）。 */
+export function flattenMenus(nodes: MenuNode[]): FlatMenu[] {
+  const out: FlatMenu[] = []
+  const walk = (list: MenuNode[]): void => {
+    for (const node of list) {
+      if (node.menu_type === 'menu' && node.path && node.component) {
+        out.push({
+          path: node.path,
+          titleKey: node.title_key,
+          component: node.component,
+          icon: node.icon,
+        })
+      }
+      walk(node.children)
+    }
+  }
+  walk(nodes)
+  return out
+}
+
+/**
+ * 解析页面组件。
+ *
+ * 找不到时返回 null 而不是抛错：菜单是数据库里的数据，可能指向一个
+ * 尚未实现或已被删掉的前端页面。这时应该显示一个明确的提示，
+ * 而不是让整个应用崩掉——那会让用户连导航都点不了。
+ */
+export function resolveComponent(component: string): Component | null {
+  return modules[`../pages/${component}.svelte`]?.default ?? null
+}
+
+// ---- 极简路由 ----
+
+let pathname = $state(window.location.pathname)
+let search = $state(window.location.search)
+
+window.addEventListener('popstate', () => {
+  pathname = window.location.pathname
+  search = window.location.search
+})
+
+function commit(to: string, replace: boolean): void {
+  const url = new URL(to, window.location.origin)
+  if (url.pathname + url.search === pathname + search) return
+  if (replace) {
+    history.replaceState(null, '', to)
+  } else {
+    history.pushState(null, '', to)
+  }
+  pathname = window.location.pathname
+  search = window.location.search
+}
+
+export const route = {
+  get pathname(): string {
+    return pathname
+  },
+  get search(): string {
+    return search
+  },
+}
+
+export function navigate(to: string): void {
+  commit(to, false)
+}
+
+/** 用在「登录后跳转」「重定向到登录页」这类不希望留下历史记录的场景。 */
+export function replaceTo(to: string): void {
+  commit(to, true)
+}
+
+/**
+ * 只替换当前页面的查询串，不留历史记录。
+ *
+ * 列表页改筛选/翻页时用：这些操作很密集，用 push 会把浏览器历史塞满，
+ * 用户按一次后退还在同一个页面上，体验很差。
+ */
+export function replaceQuery(params: Record<string, string | number | undefined>): void {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '') q.set(k, String(v))
+  }
+  const qs = q.toString()
+  commit(qs ? `${pathname}?${qs}` : pathname, true)
+}

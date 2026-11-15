@@ -1,0 +1,443 @@
+<!-- 有问题欢迎联系 hot_kun@hotmail.com -->
+<script lang="ts">
+  import { onMount } from 'svelte'
+
+  import { ApiError, api } from '$lib/api/client'
+  import { deleteWithConfirm } from '$lib/api/delete'
+  import type { FieldError, Grants, MenuNode, PermCatalogue, Role } from '$lib/api/types'
+  import FilterBar from '$lib/components/filter-bar.svelte'
+  import ListHeader from '$lib/components/list-header.svelte'
+  import Pagination from '$lib/components/pagination.svelte'
+  import TableEmpty from '$lib/components/table-empty.svelte'
+  import { Badge } from '$lib/components/ui/badge'
+  import { Button } from '$lib/components/ui/button'
+  import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+  } from '$lib/components/ui/dialog'
+  import { Input } from '$lib/components/ui/input'
+  import { NativeSelect } from '$lib/components/ui/native-select'
+  import { Label } from '$lib/components/ui/label'
+  import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+  } from '$lib/components/ui/table'
+  import { fieldErrorOf } from '$lib/i18n/errors'
+  import { t, tKey } from '$lib/i18n/index.svelte'
+  import { createListState, errKey } from '$lib/list-state.svelte'
+  import { notifyError, notifySuccess } from '$lib/stores/notify.svelte'
+  import { session } from '$lib/stores/session.svelte'
+
+  const list = createListState<Role, 'code' | 'name' | 'status'>({
+    endpoint: '/roles',
+    filterKeys: ['code', 'name', 'status'],
+    exportPath: '/api/v1/roles/export',
+  })
+
+  onMount(() => {
+    void list.load()
+  })
+
+  // ---- 新建 / 编辑 ----
+
+  type Form = { id: number | null; code: string; name: string; remark: string; status: 'active' | 'inactive' }
+
+  const emptyForm = (): Form => ({ id: null, code: '', name: '', remark: '', status: 'active' })
+
+  let editForm = $state<Form>(emptyForm())
+  let formOpen = $state(false)
+  let saving = $state(false)
+  let fieldErrors = $state<FieldError[]>([])
+
+  async function save(event: SubmitEvent) {
+    event.preventDefault()
+    saving = true
+    fieldErrors = []
+    try {
+      if (editForm.id === null) {
+        await api.post('/roles', {
+          code: editForm.code,
+          name: editForm.name,
+          remark: editForm.remark,
+          status: editForm.status,
+        })
+      } else {
+        // code 不可变：它参与鉴权判断
+        await api.put(`/roles/${editForm.id}`, {
+          name: editForm.name,
+          remark: editForm.remark,
+          status: editForm.status,
+        })
+      }
+      notifySuccess('notify.saved')
+      formOpen = false
+      await list.load()
+    } catch (err) {
+      if (err instanceof ApiError) {
+        fieldErrors = err.fieldErrors
+        if (err.fieldErrors.length === 0) notifyError(err.key)
+      } else {
+        notifyError('error.internal')
+      }
+    } finally {
+      saving = false
+    }
+  }
+
+  // ---- 授权 ----
+
+  let grantTarget = $state<Role | null>(null)
+  let grantMenus = $state<number[]>([])
+  let grantPerms = $state<string[]>([])
+  let menuTree = $state<MenuNode[]>([])
+
+  /** 菜单树压平（含层级深度），授权页不再限制两层。 */
+  const menuRows = $derived(
+    (() => {
+      const out: { node: MenuNode; depth: number }[] = []
+      const walk = (nodes: MenuNode[], depth: number) => {
+        for (const n of nodes) {
+          out.push({ node: n, depth })
+          walk(n.children, depth + 1)
+        }
+      }
+      walk(menuTree, 0)
+      return out
+    })(),
+  )
+
+  /** 带按钮的页面，压平成一维，供「按页面授按钮」使用。 */
+  const buttonPages = $derived(
+    (() => {
+      const out: MenuNode[] = []
+      const walk = (nodes: MenuNode[]) => {
+        for (const n of nodes) {
+          if (n.buttons?.length) out.push(n)
+          walk(n.children)
+        }
+      }
+      walk(menuTree)
+      return out
+    })(),
+  )
+  let permGroups = $state<PermCatalogue['groups']>([])
+  let grantSaving = $state(false)
+  let grantLoading = $state(false)
+
+  async function openGrants(role: Role) {
+    grantTarget = role
+    grantLoading = true
+    try {
+      const [grants, menus, catalogue] = await Promise.all([
+        api.get<Grants>(`/roles/${role.id}/grants`),
+        api.get<{ tree: MenuNode[] }>('/menus'),
+        api.get<PermCatalogue>('/perms'),
+      ])
+      grantMenus = grants.menu_ids
+      grantPerms = grants.perm_codes
+      menuTree = menus.tree
+      permGroups = catalogue.groups
+    } catch (err) {
+      notifyError(errKey(err))
+      grantTarget = null
+    } finally {
+      grantLoading = false
+    }
+  }
+
+  async function saveGrants() {
+    if (!grantTarget) return
+    grantSaving = true
+    try {
+      await api.put(`/roles/${grantTarget.id}/grants`, {
+        menu_ids: grantMenus,
+        perm_codes: grantPerms,
+      })
+      notifySuccess('notify.saved')
+      grantTarget = null
+    } catch (err) {
+      notifyError(errKey(err))
+    } finally {
+      grantSaving = false
+    }
+  }
+
+  async function remove(role: Role) {
+    try {
+      const done = await deleteWithConfirm(`/roles/${role.id}`)
+      if (!done) return
+      notifySuccess('notify.deleted')
+      await list.refreshAfterDelete()
+    } catch (err) {
+      notifyError(errKey(err))
+    }
+  }
+
+  let busyID = $state<number | null>(null)
+</script>
+
+<div class="flex flex-col gap-4">
+  <FilterBar onSearch={list.search} onReset={list.reset}>
+    <label class="flex w-48 flex-col gap-1.5 text-sm">
+      <span class="text-muted-foreground">{t('role.code')}</span>
+      <Input bind:value={list.filters.code} />
+    </label>
+    <label class="flex w-48 flex-col gap-1.5 text-sm">
+      <span class="text-muted-foreground">{t('field.name')}</span>
+      <Input bind:value={list.filters.name} />
+    </label>
+    <label class="flex w-48 flex-col gap-1.5 text-sm">
+      <span class="text-muted-foreground">{t('common.status')}</span>
+      <NativeSelect class="w-full" bind:value={list.filters.status}>
+        <option value="">{t('common.all')}</option>
+        <option value="active">{t('common.status.active')}</option>
+        <option value="inactive">{t('common.status.inactive')}</option>
+      </NativeSelect>
+    </label>
+  </FilterBar>
+
+  <ListHeader total={list.total}>
+    <Button data-testid="export-roles" variant="outline" size="sm" href={list.exportHref}>
+      {t('common.export')}
+    </Button>
+    {#if session.can('system:role:add')}
+      <Button size="sm" onclick={() => { editForm = emptyForm(); fieldErrors = []; formOpen = true }}>
+        {t('common.create')}
+      </Button>
+    {/if}
+  </ListHeader>
+
+  <div class="rounded-lg border bg-card">
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{t('role.code')}</TableHead>
+          <TableHead>{t('field.name')}</TableHead>
+          <TableHead>{t('role.remark')}</TableHead>
+          <TableHead>{t('common.status')}</TableHead>
+          <TableHead class="text-right">{t('common.actions')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {#if list.rows.length === 0}
+          <TableEmpty loading={list.loading} colspan={5} />
+        {/if}
+        {#each list.rows as role (role.id)}
+          <TableRow>
+            <TableCell class="font-mono text-sm">{role.code}</TableCell>
+            <TableCell class="font-medium">
+              {role.name}
+              {#if role.code === 'admin'}
+                <!-- 内置角色的权限是隐式放行的，界面上要说清楚，
+                     否则会有人去找「为什么它的授权是空的」 -->
+                <Badge variant="secondary" class="ml-2">{t('role.builtin')}</Badge>
+              {/if}
+            </TableCell>
+            <TableCell class="text-muted-foreground">{role.remark || '—'}</TableCell>
+            <TableCell>
+              <Badge variant={role.status === 'active' ? 'default' : 'secondary'}>
+                {t(role.status === 'active' ? 'common.status.active' : 'common.status.inactive')}
+              </Badge>
+            </TableCell>
+            <TableCell class="text-right whitespace-nowrap">
+              {#if session.can('system:role:list')}
+                <Button variant="ghost" size="sm" onclick={() => openGrants(role)}>
+                  {t('role.grants')}
+                </Button>
+              {/if}
+              {#if session.can('system:role:edit')}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onclick={() => {
+                    editForm = {
+                      id: role.id,
+                      code: role.code,
+                      name: role.name,
+                      remark: role.remark,
+                      status: role.status,
+                    }
+                    fieldErrors = []
+                    formOpen = true
+                  }}
+                >
+                  {t('common.edit')}
+                </Button>
+              {/if}
+              {#if session.can('system:role:delete')}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  class="text-destructive"
+                  disabled={busyID === role.id}
+                  onclick={async () => {
+                    busyID = role.id
+                    await remove(role)
+                    busyID = null
+                  }}
+                >
+                  {t('common.delete')}
+                </Button>
+              {/if}
+            </TableCell>
+          </TableRow>
+        {/each}
+      </TableBody>
+    </Table>
+  </div>
+
+  <Pagination page={list.page} totalPages={list.totalPages} onGo={list.goPage} />
+</div>
+
+<!-- 新建 / 编辑 -->
+<Dialog bind:open={formOpen}>
+  <DialogContent class="max-w-lg">
+    <form onsubmit={save}>
+      <DialogHeader>
+        <DialogTitle>{t(editForm.id === null ? 'role.createTitle' : 'role.editTitle')}</DialogTitle>
+        {#if editForm.id !== null}
+          <DialogDescription>{t('role.codeImmutable')}</DialogDescription>
+        {/if}
+      </DialogHeader>
+
+      <div class="grid gap-4 py-4">
+        <div class="grid gap-1.5">
+          <Label for="r-code">{t('role.code')}</Label>
+          <Input id="r-code" bind:value={editForm.code} disabled={editForm.id !== null} required minlength={2} maxlength={64} />
+          {#if fieldErrorOf(fieldErrors, 'code')}<p class="text-sm text-destructive">{fieldErrorOf(fieldErrors, 'code')}</p>{/if}
+        </div>
+        <div class="grid gap-1.5">
+          <Label for="r-name">{t('field.name')}</Label>
+          <Input id="r-name" bind:value={editForm.name} required minlength={2} maxlength={128} />
+          {#if fieldErrorOf(fieldErrors, 'name')}<p class="text-sm text-destructive">{fieldErrorOf(fieldErrors, 'name')}</p>{/if}
+        </div>
+        <div class="grid gap-1.5">
+          <Label for="r-remark">{t('role.remark')}</Label>
+          <Input id="r-remark" bind:value={editForm.remark} maxlength={255} />
+        </div>
+        <div class="grid gap-1.5">
+          <Label for="r-status">{t('common.status')}</Label>
+          <NativeSelect id="r-status" class="w-full" bind:value={editForm.status}>
+            <option value="active">{t('common.status.active')}</option>
+            <option value="inactive">{t('common.status.inactive')}</option>
+          </NativeSelect>
+        </div>
+      </div>
+
+      <DialogFooter>
+        <Button type="button" variant="outline" onclick={() => (formOpen = false)}>{t('common.cancel')}</Button>
+        <Button type="submit" disabled={saving}>{t('common.save')}</Button>
+      </DialogFooter>
+    </form>
+  </DialogContent>
+</Dialog>
+
+<!-- 授权 -->
+<Dialog open={grantTarget !== null} onOpenChange={(open) => !open && (grantTarget = null)}>
+  <DialogContent class="max-h-[85svh] max-w-2xl overflow-y-auto">
+    <DialogHeader>
+      <DialogTitle>
+        {grantTarget ? t('role.grantsTitle', { name: grantTarget.name }) : ''}
+      </DialogTitle>
+      <DialogDescription>{t('role.grantsHint')}</DialogDescription>
+    </DialogHeader>
+
+    {#if grantLoading}
+      <p class="py-8 text-center text-sm text-muted-foreground">{t('common.loading')}</p>
+    {:else}
+      <div class="grid gap-6 py-4">
+        <section class="grid gap-2">
+          <h3 class="text-sm font-medium">{t('role.menus')}</h3>
+          <div class="flex flex-col gap-1.5 rounded-md border p-3">
+            {#each menuRows as { node, depth } (node.id)}
+              <label
+                class="flex items-center gap-2 text-sm"
+                class:font-medium={depth === 0}
+                style="padding-left: {depth * 1.25}rem"
+              >
+                <input
+                  type="checkbox"
+                  class="size-4 accent-primary"
+                  checked={grantMenus.includes(node.id)}
+                  onchange={(e) =>
+                    (grantMenus = e.currentTarget.checked
+                      ? [...grantMenus, node.id]
+                      : grantMenus.filter((id) => id !== node.id))}
+                />
+                {tKey(node.title_key)}
+              </label>
+            {/each}
+          </div>
+        </section>
+
+        <section class="grid gap-2">
+          <h3 class="text-sm font-medium">{t('role.pageButtons')}</h3>
+          <p class="text-xs text-muted-foreground">{t('role.pageButtonsHint')}</p>
+          <div class="flex flex-col gap-3 rounded-md border p-3">
+            {#each buttonPages as page (page.id)}
+              <div class="grid gap-1.5">
+                <p class="text-sm font-medium text-muted-foreground">{tKey(page.title_key)}</p>
+                <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {#each page.buttons as b (b.code)}
+                    <label class="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        class="size-4 accent-primary"
+                        checked={grantPerms.includes(b.code)}
+                        onchange={(e) =>
+                          (grantPerms = e.currentTarget.checked
+                            ? [...grantPerms, b.code]
+                            : grantPerms.filter((c) => c !== b.code))}
+                      />
+                      <span class="font-mono text-xs">{b.code}</span>
+                    </label>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </section>
+
+        <section class="grid gap-2">
+          <h3 class="text-sm font-medium">{t('role.perms')}</h3>
+          <div class="flex flex-col gap-3 rounded-md border p-3">
+            {#each permGroups as group (group.title_key)}
+              <div class="grid gap-1.5">
+                <p class="text-sm font-medium text-muted-foreground">{tKey(group.title_key)}</p>
+                <div class="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {#each group.perms as item (item.code)}
+                    <label class="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        class="size-4 accent-primary"
+                        checked={grantPerms.includes(item.code)}
+                        onchange={(e) =>
+                          (grantPerms = e.currentTarget.checked
+                            ? [...grantPerms, item.code]
+                            : grantPerms.filter((c) => c !== item.code))}
+                      />
+                      {tKey(item.label_key)}
+                    </label>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        </section>
+      </div>
+    {/if}
+
+    <DialogFooter>
+      <Button variant="outline" onclick={() => (grantTarget = null)}>{t('common.cancel')}</Button>
+      <Button onclick={saveGrants} disabled={grantSaving || grantLoading}>{t('common.save')}</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>

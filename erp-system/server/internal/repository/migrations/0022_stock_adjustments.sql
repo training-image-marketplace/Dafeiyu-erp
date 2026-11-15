@@ -1,0 +1,25 @@
+-- 库存手工调整改为可审核单据；审核通过时才更新库存和流水。
+CREATE TABLE erp_stock_adjustments (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    adjustment_no VARCHAR(64) NOT NULL,
+    warehouse_id BIGINT UNSIGNED NOT NULL,
+    goods_id BIGINT UNSIGNED NOT NULL,
+    direction VARCHAR(8) NOT NULL,
+    qty DECIMAL(18,3) NOT NULL,
+    reason VARCHAR(255) NOT NULL DEFAULT '',
+    status VARCHAR(16) NOT NULL DEFAULT 'draft',
+    created_by BIGINT UNSIGNED NOT NULL,
+    submitted_at DATETIME(3) NULL,
+    approved_by BIGINT UNSIGNED NULL,
+    approved_at DATETIME(3) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_stock_adjustment_no (adjustment_no),
+    KEY idx_stock_adjustment_status (status, direction, id),
+    CONSTRAINT fk_stock_adjustment_warehouse FOREIGN KEY (warehouse_id) REFERENCES erp_warehouses (id),
+    CONSTRAINT fk_stock_adjustment_goods FOREIGN KEY (goods_id) REFERENCES erp_goods (id),
+    CONSTRAINT ck_stock_adjustment_direction CHECK (direction IN ('in','out')),
+    CONSTRAINT ck_stock_adjustment_qty CHECK (qty > 0),
+    CONSTRAINT ck_stock_adjustment_status CHECK (status IN ('draft','submitted','approved','rejected'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

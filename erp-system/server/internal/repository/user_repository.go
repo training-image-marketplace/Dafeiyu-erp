@@ -1,0 +1,468 @@
+// 有问题欢迎联系 hot_kun@hotmail.com
+package repository
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"strings"
+	"time"
+
+	"practical-training/erp-system/internal/domain"
+)
+
+type UserRepository struct {
+	db *sql.DB
+}
+
+func NewUserRepository(db *sql.DB) *UserRepository {
+	return &UserRepository{db: db}
+}
+
+const userColumns = `id, created_at, updated_at, status, username, password,
+	nickname, mobile, email, login_ip, login_at, failed_count, locked_until`
+
+func scanUser(s interface{ Scan(...any) error }) (domain.User, error) {
+	var u domain.User
+	err := s.Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt, &u.Status, &u.Username, &u.Password,
+		&u.Nickname, &u.Mobile, &u.Email, &u.LoginIP, &u.LoginAt,
+		&u.FailedCount, &u.LockedUntil)
+	return u, err
+}
+
+// UserFilter 是用户列表的筛选条件。空字符串（或 0）表示不限制。
+type UserFilter struct {
+	Username string // 模糊匹配
+	Nickname string // 模糊匹配
+	Mobile   string // 模糊匹配
+	Status   string // 精确匹配
+	// RoleID 按角色筛。0 表示不限制。
+	RoleID int64
+}
+
+func userWhere(f UserFilter) (string, []any) {
+	var b whereBuilder
+	// 列名是代码里的常量，不接受外部输入，所以拼接是安全的
+	b.like("username", f.Username)
+	b.like("nickname", f.Nickname)
+	b.like("mobile", f.Mobile)
+	b.eq("status", f.Status)
+
+	// 按角色筛用 EXISTS 而不是 JOIN：
+	//   * WHERE 是 whereBuilder 单独拼的，JOIN 得改 FROM 那一侧，List 与 Count 都要跟着改
+	//   * EXISTS 天然不会因为关联表命中多行而把结果行数翻倍——
+	//     换成 JOIN 的话，将来若改成「多重角色」筛选就会错得很难查
+	if f.RoleID > 0 {
+		b.raw(`EXISTS (SELECT 1 FROM sys_user_roles ur
+			WHERE ur.user_id = sys_users.id AND ur.role_id = ?)`, f.RoleID)
+	}
+	return b.clause(), b.args
+}
+
+func (r *UserRepository) List(ctx context.Context, f UserFilter, limit, offset int) ([]domain.User, error) {
+	where, args := userWhere(f)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+userColumns+` FROM sys_users`+where+` ORDER BY id LIMIT ? OFFSET ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	list := make([]domain.User, 0, limit)
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, u)
+	}
+	return list, rows.Err()
+}
+
+func (r *UserRepository) Count(ctx context.Context, f UserFilter) (int64, error) {
+	where, args := userWhere(f)
+
+	var n int64
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sys_users`+where, args...).Scan(&n)
+	return n, err
+}
+
+func (r *UserRepository) GetByID(ctx context.Context, id int64) (domain.User, error) {
+	u, err := scanUser(r.db.QueryRowContext(ctx,
+		`SELECT `+userColumns+` FROM sys_users WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.User{}, domain.ErrNotFound
+	}
+	return u, err
+}
+
+func (r *UserRepository) GetByUsername(ctx context.Context, username string) (domain.User, error) {
+	u, err := scanUser(r.db.QueryRowContext(ctx,
+		`SELECT `+userColumns+` FROM sys_users WHERE username = ?`, username))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.User{}, domain.ErrNotFound
+	}
+	return u, err
+}
+
+func (r *UserRepository) Create(ctx context.Context, u domain.User) (domain.User, error) {
+	res, err := r.db.ExecContext(ctx, `
+		INSERT INTO sys_users (status, username, password, nickname, mobile, email)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		u.Status, u.Username, u.Password, u.Nickname, u.Mobile, u.Email)
+	if err != nil {
+		return domain.User{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return domain.User{}, err
+	}
+	u.ID = id
+	// MySQL 没有 RETURNING，自增主键要回查一次才能拿到库生成的 created_at。
+	if err := r.db.QueryRowContext(ctx,
+		`SELECT created_at, updated_at FROM sys_users WHERE id = ?`, id,
+	).Scan(&u.CreatedAt, &u.UpdatedAt); err != nil {
+		return domain.User{}, err
+	}
+	return u, nil
+}
+
+// CreateBatch 在单事务里插入一批用户，返回插入条数。
+//
+// 整批同事务是「一行不合格就一行都不写」的落地：分批提交的话，
+// 中途失败会留下一半数据，而列表里多了哪些用户没人说得清。
+// 密码哈希由调用方传入（整批共用一个），这里只管写。
+func (r *UserRepository) CreateBatch(ctx context.Context, users []domain.User) error {
+	if len(users) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // Commit 成功后这里是空操作
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO sys_users (status, username, password, nickname, mobile, email)
+		VALUES (?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close() //nolint:errcheck // 事务提交后再关是正常的
+
+	for _, u := range users {
+		if _, err := stmt.ExecContext(ctx,
+			u.Status, u.Username, u.Password, u.Nickname, u.Mobile, u.Email); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// UpdateProfile 只改资料字段。username 不可变，password 走独立方法。
+func (r *UserRepository) UpdateProfile(ctx context.Context, u domain.User) error {
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE sys_users
+		SET status = ?, nickname = ?, mobile = ?, email = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE id = ?`,
+		u.Status, u.Nickname, u.Mobile, u.Email, u.ID,
+	)
+	if err != nil {
+		return err
+	}
+	return requireAffected(res)
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, id int64, hash string) error {
+	// 一并清掉登录失败锁定：改密码的人要么是本人（刚验证过旧密码），
+	// 要么是有 resetPwd 权限的管理员，两条路都足以解除「账号被锁」——
+	// 否则管理员重置完密码，那个人依然登不进来，会以为重置没生效。
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE sys_users
+		 SET password = ?, failed_count = 0, locked_until = NULL, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ?`, hash, id)
+	if err != nil {
+		return err
+	}
+	return requireAffected(res)
+}
+
+// AddFailedLogin 记一次登录失败，返回**新的**连续失败次数。
+//
+// 用事务 + SELECT ... FOR UPDATE 把「读-加一-写」串行化：
+// 并发的两次失败若各读各的，计数会少加一次，阈值就形同虚设。
+// MySQL 没有 RETURNING，所以不能用一条 UPDATE 同时自增并返回结果。
+func (r *UserRepository) AddFailedLogin(ctx context.Context, username string) (int, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback() //nolint:errcheck // Commit 成功后这里是空操作
+
+	var count int
+	err = tx.QueryRowContext(ctx,
+		`SELECT failed_count FROM sys_users WHERE username = ? FOR UPDATE`, username).Scan(&count)
+	if errors.Is(err, sql.ErrNoRows) {
+		// 用户不存在。调用方（登录流程）只在拿到用户之后才调这里，
+		// 所以真出现说明有人绕过了那一步——按 0 处理，不制造一个假的失败记录
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	count++
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE sys_users SET failed_count = ? WHERE username = ?`, count, username); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// SetLoginLock 设置登录锁定的到期时间（传 nil 表示解锁）。
+func (r *UserRepository) SetLoginLock(ctx context.Context, username string, until *time.Time) error {
+	var value any
+	if until != nil {
+		value = toDBTime(*until)
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE sys_users SET locked_until = ? WHERE username = ?`, value, username)
+	return err
+}
+
+// ClearFailedLogins 清零连续失败计数并解锁。
+//
+// 成功登录时调用：失败计数只对「连续」有意义，密码已经对了，
+// 这一轮尝试到此结束。锁定到期后的解锁也走它（见 auth.SessionService.Login）。
+func (r *UserRepository) ClearFailedLogins(ctx context.Context, username string) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE sys_users SET failed_count = 0, locked_until = NULL WHERE username = ?`, username)
+	return err
+}
+
+func (r *UserRepository) Delete(ctx context.Context, id int64) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM sys_users WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	return requireAffected(res)
+}
+
+// CountOtherAdmins 返回除 excludeID 之外，仍持有内置 admin 角色且处于启用状态的用户数。
+//
+// 删除或停用用户前必须检查它：把最后一个管理员删掉之后，没有任何界面能恢复，
+// 只能手工改库。停用同样要检查——被停用的管理员登不进来，效果和删除一样。
+func (r *UserRepository) CountOtherAdmins(ctx context.Context, excludeID int64) (int64, error) {
+	var n int64
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT u.id)
+		FROM sys_users u
+		JOIN sys_user_roles ur ON ur.user_id = u.id
+		JOIN sys_roles r       ON r.id = ur.role_id
+		WHERE r.code = ? AND u.status = ? AND u.id <> ?`,
+		domain.RoleCodeAdmin, domain.StatusActive, excludeID).Scan(&n)
+	return n, err
+}
+
+// HasRole 判断用户是否直接持有某个**启用**角色。
+//
+// 过滤 status 与权限查询保持同一语义：停用内置 admin 角色这条路已经被
+// RoleService 拦住了，这里的过滤是为了让「停用即撤销」这条规则只有一处解释。
+func (r *UserRepository) HasRole(ctx context.Context, userID int64, roleCode string) (bool, error) {
+	var ok bool
+	err := r.db.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM sys_user_roles ur
+			JOIN sys_roles r ON r.id = ur.role_id
+			WHERE ur.user_id = ? AND r.code = ? AND r.status = ?
+		)`, userID, roleCode, domain.StatusActive).Scan(&ok)
+	return ok, err
+}
+
+// RoleIDs 返回用户当前持有的角色 id 列表。
+func (r *UserRepository) RoleIDs(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT role_id FROM sys_user_roles WHERE user_id = ? ORDER BY role_id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ReplaceRoles 在单事务里重设用户的角色绑定。
+//
+// 先删后插必须同事务：中途失败若留下空绑定，该用户会变成无任何权限的账号。
+//
+// 「不能移走最后一个管理员的 admin 角色」这个判断也在这个事务里做，
+// 而不是由调用方先查一次再调这里：分两步的话，两个管理员互相摘对方
+// 的 admin 角色时，两边都会先看到「管理员有 2 个」，然后各自提交成功，
+// 结果一个管理员都不剩。放进同一事务后，SQLite 的单写者模型保证
+// 后提交的那个看到的是前一个提交后的状态。
+func (r *UserRepository) ReplaceRoles(ctx context.Context, userID int64, roleIDs []int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // Commit 成功后这里是空操作
+
+	if err := guardLastAdminInTx(ctx, tx, userID, roleIDs); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM sys_user_roles WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	for _, roleID := range roleIDs {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO sys_user_roles (user_id, role_id) VALUES (?, ?)`, userID, roleID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// guardLastAdminInTx 在事务内判定「这次重绑会不会摘掉最后一个管理员的 admin 角色」。
+//
+// 三个查询都走同一个 tx，看到的是一致快照；但「一致快照」不等于「串行」：
+// MySQL 的 REPEATABLE READ 下两个事务可以各自读到「管理员还有 2 个」，
+// 然后同时提交，结果一个都不剩。所以先对 admin 角色行加 FOR UPDATE，
+// 让并发的角色重绑在数据库层排队，后到的事务必须等前者提交后再重新判断。
+func guardLastAdminInTx(ctx context.Context, tx *sql.Tx, userID int64, roleIDs []int64) error {
+	// 这把锁是「最后管理员」判断的串行化点。锁的是内置 admin 角色行，
+	// 所有会改动 admin 绑定的路径都要经过这里，因此不会漏。
+	var adminRoleID int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT id FROM sys_roles WHERE code = ? FOR UPDATE`,
+		domain.RoleCodeAdmin).Scan(&adminRoleID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil // 库里没有内置 admin 角色，这段保护无从谈起
+		}
+		return err
+	}
+
+	// 当前持有 admin 吗？不持有就跟最后管理员无关。
+	var isAdmin bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM sys_user_roles ur
+			JOIN sys_roles r ON r.id = ur.role_id
+			WHERE ur.user_id = ? AND r.code = ? AND r.status = ?
+		)`, userID, domain.RoleCodeAdmin, domain.StatusActive).Scan(&isAdmin); err != nil {
+		return err
+	}
+	if !isAdmin {
+		return nil
+	}
+
+	// 新角色集合里还留着 admin 吗？
+	keeps := false
+	if len(roleIDs) > 0 {
+		placeholders := make([]string, 0, len(roleIDs))
+		args := make([]any, 0, len(roleIDs)+1)
+		for _, id := range roleIDs {
+			placeholders = append(placeholders, "?")
+			args = append(args, id)
+		}
+		args = append(args, domain.RoleCodeAdmin)
+		if err := tx.QueryRowContext(ctx,
+			`SELECT EXISTS(SELECT 1 FROM sys_roles WHERE id IN (`+strings.Join(placeholders, ",")+`) AND code = ?)`,
+			args...).Scan(&keeps); err != nil {
+			return err
+		}
+	}
+	if keeps {
+		return nil
+	}
+
+	// 摘掉之后还有别的启用管理员吗？
+	var admins int64
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT u.id)
+		FROM sys_users u
+		JOIN sys_user_roles ur ON ur.user_id = u.id
+		JOIN sys_roles r       ON r.id = ur.role_id
+		WHERE r.code = ? AND r.status = ? AND u.status = ?`,
+		domain.RoleCodeAdmin, domain.StatusActive, domain.StatusActive).Scan(&admins); err != nil {
+		return err
+	}
+	if admins <= 1 {
+		return domain.ErrLastAdmin
+	}
+	return nil
+}
+
+// CreateWithRoles 在**单事务**里建用户并绑定角色。
+//
+// 界面上一张表单同时填了账号和角色，后端就必须把它当一件事：
+// 分两次请求的话，第二次失败会留下一个没有任何角色的用户——
+// 用户以为自己建好了，实际登进去什么都看不见，而且界面不会提示。
+func (r *UserRepository) CreateWithRoles(ctx context.Context, u domain.User, roleIDs []int64) (domain.User, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return domain.User{}, err
+	}
+	defer tx.Rollback() //nolint:errcheck // Commit 成功后这里是空操作
+
+	res, err := tx.ExecContext(ctx, `
+		INSERT INTO sys_users (status, username, password, nickname, mobile, email)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		u.Status, u.Username, u.Password, u.Nickname, u.Mobile, u.Email)
+	if err != nil {
+		return domain.User{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return domain.User{}, err
+	}
+	u.ID = id
+	// 事务内回查：LastInsertId 只给主键，库生成的 created_at/updated_at 要再取一次。
+	if err := tx.QueryRowContext(ctx,
+		`SELECT created_at, updated_at FROM sys_users WHERE id = ?`, id,
+	).Scan(&u.CreatedAt, &u.UpdatedAt); err != nil {
+		return domain.User{}, err
+	}
+
+	for _, roleID := range roleIDs {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO sys_user_roles (user_id, role_id) VALUES (?, ?)`, u.ID, roleID); err != nil {
+			return domain.User{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return domain.User{}, err
+	}
+	return u, nil
+}
+
+// ExistsUsername 判断用户名是否已被占用（excludeID 用于编辑时排除自己）。
+func (r *UserRepository) ExistsUsername(ctx context.Context, username string, excludeID int64) (bool, error) {
+	var ok bool
+	err := r.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM sys_users WHERE username = ? AND id <> ?)`,
+		username, excludeID).Scan(&ok)
+	return ok, err
+}
+
+// SetLoginInfo 记录最近一次成功登录。登录是低频操作，直接写库即可。
+func (r *UserRepository) SetLoginInfo(ctx context.Context, userID int64, ip string, at time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE sys_users SET login_ip = ?, login_at = ? WHERE id = ?`,
+		ip, toDBTime(at), userID)
+	return err
+}

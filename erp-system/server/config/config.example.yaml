@@ -1,0 +1,82 @@
+# 有问题欢迎联系 hot_kun@hotmail.com
+# mini-ruoyi 配置样例。
+#
+# 用法：复制为 config/config.yaml 再按需修改。
+#   cp config/config.example.yaml config/config.yaml
+#
+# 不改也能跑——所有项都有内置默认值，这份文件只写你要覆盖的项即可。
+#
+# 优先级：环境变量 > 配置文件 > 内置默认值。
+# 环境变量优先是为了让 systemd / 容器能覆盖单个值，而不必去改文件。
+#
+# ⚠️ config.yaml 已在 .gitignore 中：它含部署相关信息（监听地址、代理地址），
+#    每个部署都不一样，不该进版本库。
+
+server:
+  # HTTP 监听地址
+  addr: ":8889"
+  # 设为 dev 时使用 gin 的调试模式（输出路由表与警告日志）
+  env: prod
+
+  # 给会话 cookie 加 Secure 标记。
+  # 本服务自身不监听 TLS，所以默认 false；
+  # 前面有 TLS 终止层（nginx 等）时必须设为 true。
+  secure_cookie: false
+
+  # 可信反向代理的 IP / CIDR 列表。
+  #
+  # 默认必须为空：本服务可以直接对外监听，无条件采信 X-Forwarded-For
+  # 会让客户端随便伪装成任意 IP，按 IP 限流形同虚设。
+  #
+  # 但反过来，放在 nginx 后面时必须填上代理地址，否则所有请求的来源 IP
+  # 都是 127.0.0.1 —— 按 IP 限流会退化成全局限流（一个人刷满 20 rps，
+  # 所有人一起 429），登录日志里的 IP 也全是代理地址。
+  trusted_proxies: []
+  # trusted_proxies: ["127.0.0.1", "10.0.0.0/8"]
+
+  rate_limit:
+    # 每个 IP 的限流速率与瞬时突发量。
+    # 批量运维操作（导入用户、批删）被自己的限流挡住时调大这两个值。
+    rps: 20
+    burst: 40
+
+# 平台调用 /internal/* 的共享令牌。生产必须设置，且与平台侧一致。
+# 为空时只允许 127.0.0.1 访问。
+internal_token: ""
+
+database:
+  # MySQL 8.0.16+。库要先建好（应用只跑迁移，不负责 CREATE DATABASE）：
+  #   CREATE DATABASE training_platform
+  #     DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+  host: 127.0.0.1
+  port: 23306
+  user: root
+  # 生产必须用环境变量 APP_DB_PASSWORD 注入，不要把真实密码写进这里。
+  # 本文件在版本库里，config.yaml 才是每个部署自己的（已 gitignore）。
+  password: ""
+  name: pt_training
+
+  # 连接池。SQLite 时代固定 4 条（单写者模型），MySQL 没有这个限制；
+  # 但也不是越大越好，默认 30 对单实例足够。
+  max_open_conns: 30
+  max_idle_conns: 10
+  conn_max_lifetime_minutes: 30
+
+web:
+  # 前端构建产物目录。
+  # 留空表示自动查找：二进制同级 web/ → ./web → ../bin/web → bin/web。
+  # 自动查找是为了让 go run 和 IDE 启动也能找到产物（那时二进制在临时目录里）。
+  dir: ""
+
+upload:
+  # 文件本体的存放目录，相对进程工作目录
+  dir: uploads
+  # 单文件上限（MiB）
+  max_mb: 20
+  # 所有文件的总容量上限（MiB），不能小于 max_mb
+  quota_mb: 512
+
+log:
+  # 操作日志与登录日志的保留天数。
+  # 日志表只增不改，不设上限迟早会把磁盘吃满。
+  retention_days: 30
