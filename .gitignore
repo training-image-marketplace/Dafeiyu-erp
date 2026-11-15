@@ -1,0 +1,40 @@
+# Copyright (c) 2025 Kong
+# Released under the MIT License. See the LICENSE file for details.
+# Author: Kong See：https://github.com/Kun-GitHub/mini-ruoyi
+# Email: hot_kun@hotmail.com
+
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.idea
+
+.idea/
+.claude/
+.vscode/
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Project runtime log
+logs/*.log
+config/config.yaml
+
+# SQLite 运行时副产物。data.db 本身随仓库分发（开箱即用），
+# 但 WAL/SHM 是临时的，且每次启动内容都不同，不应入库。
+*.db-wal
+*.db-shm
+
+.vscode/
+vendor/
+
+# 上传的文件本体。默认路径是相对工作目录的 uploads/，
+# 从 server/ 目录启动时就会落在这里。
+uploads/
