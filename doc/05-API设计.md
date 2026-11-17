@@ -7,7 +7,8 @@
 
 - 前缀 `/api/v1`；内部接口前缀 `/internal`（仅内网 + 令牌）。
 - 编码 JSON / UTF-8；时间 RFC3339 UTC（`2026-10-25T04:00:00Z`）。
-- 认证：`Cookie: mr_session=<token>`；写请求额外带 `X-CSRF-Token`。
+- 认证：`Cookie: erp_session=<token>`；写请求额外带 `X-CSRF-Token`。
+  Cookie 名与平台（`pt_session`）刻意不同：浏览器 Cookie 不区分端口，同名会互相覆盖。
 - 响应信封：
 
 ```json

@@ -21,7 +21,7 @@ func call(t *testing.T, r *gin.Engine, method, path, body string, s sessionInfo,
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.AddCookie(&http.Cookie{Name: "mr_session", Value: s.cookie})
+	req.AddCookie(&http.Cookie{Name: "erp_session", Value: s.cookie})
 	if method != http.MethodGet && method != http.MethodHead {
 		req.Header.Set("X-CSRF-Token", s.csrfToken)
 	}

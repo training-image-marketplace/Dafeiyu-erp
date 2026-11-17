@@ -155,7 +155,7 @@ func login(t *testing.T, r *gin.Engine, username, password string) sessionInfo {
 
 	var cookie string
 	for _, c := range w.Result().Cookies() {
-		if c.Name == "mr_session" {
+		if c.Name == "erp_session" {
 			cookie = c.Value
 			if !c.HttpOnly {
 				t.Error("会话 cookie 必须是 HttpOnly")
@@ -194,7 +194,7 @@ func withSession(method, path, body string, s sessionInfo, csrf bool) *http.Requ
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.AddCookie(&http.Cookie{Name: "mr_session", Value: s.cookie})
+	req.AddCookie(&http.Cookie{Name: "erp_session", Value: s.cookie})
 	if csrf {
 		req.Header.Set("X-CSRF-Token", s.csrfToken)
 	}

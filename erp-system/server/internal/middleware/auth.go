@@ -19,7 +19,7 @@ import (
 const (
 	// CookieName 是会话 cookie 名。HttpOnly 让 JS 读不到它，
 	// 因此 XSS 也偷不走会话——这正是选 session cookie 而不是 localStorage JWT 的原因之一。
-	CookieName = "mr_session"
+	CookieName = "erp_session"
 
 	ctxIdentity = "auth.identity"
 	ctxSession  = "auth.session"

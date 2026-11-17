@@ -70,7 +70,7 @@ func importRequestWithPassword(
 	req := httptest.NewRequest(http.MethodPost, path, &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("X-CSRF-Token", s.csrfToken)
-	req.AddCookie(&http.Cookie{Name: "mr_session", Value: s.cookie})
+	req.AddCookie(&http.Cookie{Name: "erp_session", Value: s.cookie})
 
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -564,7 +564,7 @@ func TestImportUsersRejectsBadRequests(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/import", &buf)
 		req.Header.Set("Content-Type", mw.FormDataContentType())
 		req.Header.Set("X-CSRF-Token", admin.csrfToken)
-		req.AddCookie(&http.Cookie{Name: "mr_session", Value: admin.cookie})
+		req.AddCookie(&http.Cookie{Name: "erp_session", Value: admin.cookie})
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
@@ -642,7 +642,7 @@ func TestImportUsersRejectsBadRequests(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/import", &buf)
 		req.Header.Set("Content-Type", mw.FormDataContentType())
 		req.Header.Set("X-CSRF-Token", admin.csrfToken)
-		req.AddCookie(&http.Cookie{Name: "mr_session", Value: admin.cookie})
+		req.AddCookie(&http.Cookie{Name: "erp_session", Value: admin.cookie})
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
