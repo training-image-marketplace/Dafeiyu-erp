@@ -152,3 +152,11 @@ Dafeiyu-erp/
 │   └── web/                 # Svelte 5 前端
 └── erp-android/             # Compose 客户端
 ```
+
+## 10. 相关链接
+
+- 平台官网：[training.wkong.kdns.fr](https://training.wkong.kdns.fr/)
+- 镜像广场：[training.wkong.kdns.fr/#market](https://training.wkong.kdns.fr/#market)
+- 帮助文档：[wkong.kdns.fr/docs/training-platform](https://wkong.kdns.fr/docs/training-platform/)
+
+本仓库是镜像广场里的一个项目，平台本体不开源（见 §7、§8）。

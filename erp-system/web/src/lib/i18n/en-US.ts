@@ -8,7 +8,7 @@ import type { zhCN } from './zh-CN'
  * rather than a silently untranslated string at runtime.
  */
 export const enUS: Record<keyof typeof zhCN, string> = {
-  'app.name': 'Dayufish ERP',
+  'app.name': 'Dafeiyu ERP',
   'app.description': 'Purchasing, inventory and sales in one back office',
   'app.localeLabel': 'Language',
 
@@ -169,7 +169,7 @@ export const enUS: Record<keyof typeof zhCN, string> = {
   'login.submitting': 'Signing in…',
   'login.hint': 'The default account is admin / admin123. Change the password right after signing in.',
 
-  'login.eyebrow': 'DAYUFISH · ERP',
+  'login.eyebrow': 'DAFEIYU · ERP',
   'login.welcome': 'Sign in to your workspace',
   'login.welcomeHint': "Pick up today's purchasing, inventory and sales work.",
   'login.heroBadge': 'One flow · every document traceable',
@@ -188,7 +188,7 @@ export const enUS: Record<keyof typeof zhCN, string> = {
   'login.passwordShow': 'Show input',
   'login.passwordHide': 'Hide input',
   'login.helper': 'Your session lives on the server and ends when you sign out.',
-  'login.footer': '© 2026 Dayufish ERP · Teaching demo',
+  'login.footer': '© 2026 Dafeiyu ERP · Teaching demo',
 
   'nav.closeTab': 'Close',
   'nav.closeOthers': 'Close others',

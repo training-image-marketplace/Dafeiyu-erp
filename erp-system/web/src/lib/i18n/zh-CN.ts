@@ -173,7 +173,7 @@ export const zhCN = {
 
   // 登录页：左侧品牌叙事 + 右侧表单。文案集中放这里，
   // 改文案不必碰组件；en-US 的类型由本文件推导，漏键会编译报错。
-  'login.eyebrow': 'DAYUFISH · ERP',
+  'login.eyebrow': 'DAFEIYU · ERP',
   'login.welcome': '登录工作台',
   'login.welcomeHint': '继续处理今天的采购、库存与销售业务。',
   'login.heroBadge': '进销存一体化 · 单据全程留痕',
