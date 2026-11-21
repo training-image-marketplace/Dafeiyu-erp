@@ -125,8 +125,8 @@ func TestSeedRbac(t *testing.T) {
 		{"menu.system", 4},
 		{"menu.monitor", 4},
 		{"menu.tool", 2},
-		// ERP 下分三组：基础数据 / ERP 数据 / 审核中心
-		{"menu.erp", 3},
+		// ERP 下：三组业务目录 + 缺陷开关 + Android 客户端
+		{"menu.erp", 5},
 		{"menu.erp.basic", 5},
 		{"menu.erp.biz", 8}, // 库存/采购/销售/两类退货 + 调拨/盘点/报表
 		{"menu.erp.audit", 2},

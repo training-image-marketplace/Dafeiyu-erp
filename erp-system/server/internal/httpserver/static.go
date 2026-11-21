@@ -56,8 +56,13 @@ func MountStatic(r *gin.Engine, webDir string) error {
 		path := c.Request.URL.Path
 
 		// API 路径和缺失的静态资源绝不能回落到 index.html：
-		// 否则前端会把一整页 HTML 当 JSON 解析，报错信息完全看不出真正原因
-		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, AssetsPrefix) {
+		// 否则前端会把一整页 HTML 当 JSON 解析，报错信息完全看不出真正原因。
+		//
+		// /apk/ 也要在这里挡住：gin 的静态路由找不到文件时会交给 NoRoute，
+		// 回落到 index.html 就成了「200 + HTML」——下载页据此判断安装包已上传，
+		// 用户点下载拿到的是一个网页。缺失的安装包必须是 404。
+		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, AssetsPrefix) ||
+			strings.HasPrefix(path, "/apk/") {
 			httpx.Fail(c, http.StatusNotFound, httpx.KeyNotFound)
 			return
 		}
