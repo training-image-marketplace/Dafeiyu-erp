@@ -17,7 +17,7 @@ import (
 //
 // 这里写死而不是动态统计：新增迁移时必须显式改这个数字，
 // 从而强制作者想一想「新迁移是否也该有对应的验证」。
-const migrationCount = 28
+const migrationCount = 29
 
 func TestMigrateCreatesSchemaAndIsIdempotent(t *testing.T) {
 	db := testutil.New(t)

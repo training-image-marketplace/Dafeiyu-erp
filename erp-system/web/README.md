@@ -33,7 +33,7 @@ src/lib/i18n/         zh-CN / en-US（622 条），缺键由 Go 测试兜底
 src/lib/stores/       session / confirm / notify / tabs
 src/lib/list-state.svelte.ts   分页 + 筛选 + URL 同步
 src/lib/router.svelte.ts       基于 import.meta.glob 的路由
-src/pages/            每个 .svelte 自动成为一个路由（27 个页面）
+src/pages/            每个 .svelte 自动成为一个路由（29 个页面）
 e2e/                  Playwright 用例
 ```
 

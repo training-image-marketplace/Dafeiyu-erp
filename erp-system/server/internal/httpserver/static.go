@@ -41,6 +41,15 @@ func MountStatic(r *gin.Engine, webDir string) error {
 		serveSPA = true
 		log.Printf("从 %s 托管前端", webDir)
 		r.StaticFS(AssetsPrefix, http.Dir(assetsDir))
+
+		// Android 安装包放这里由后端直接托管，不经过鉴权，也不用重新构建前端：
+		// 把 apk 丢进 <webDir>/apk/ 就能被 /apk/<文件名> 下载到。
+		// 目录不存在时不注册路由，避免 gin 把 /apk/* 的请求交给一个空文件服务器。
+		apkDir := filepath.Join(webDir, "apk")
+		if _, err := os.Stat(apkDir); err == nil {
+			r.Static("/apk", apkDir)
+			log.Printf("从 %s 托管 APK 下载", apkDir)
+		}
 	}
 
 	r.NoRoute(func(c *gin.Context) {

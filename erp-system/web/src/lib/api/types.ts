@@ -493,6 +493,14 @@ export type ReturnOrder = {
 }
 
 /** 审核中心的一行：四类单据的统一视图。 */
+/** 一条可注入的教学缺陷。wired 为 false 表示还没有业务分支，打开不会有变化。 */
+export type BugSwitch = {
+  code: string
+  name: string
+  area: string
+  wired: boolean
+}
+
 export type Dashboard = {
   goods_count: number
   customer_count: number

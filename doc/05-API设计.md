@@ -129,7 +129,8 @@ monitor:* / tool:*       监控与工具
 | 方法 | 路径 | 权限 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/switches` | `erp:switch:list` | 读当前生效开关（作用域固定 all） |
-| POST | `/switches/bug` | `erp:switch:edit` | `{"bug_code":"BUG-002","enabled":true}`，读改写 all 作用域里的单个缺陷 |
+| GET | `/switches/bugs` | `erp:switch:list` | 缺陷目录：`[{code,name,area,wired}]`，`wired=false` 表示尚未接线 |
+| POST | `/switches/bug` | `erp:switch:edit` | `{"bug_code":"BUG-002","enabled":true}`，读改写 all 作用域里的单个缺陷；目录外的码返回 400 |
 | GET | `/audit/switches` | `erp:switch:list` | 列出库里所有作用域的配置，供排查 |
 
 ## 9. 系统接口
@@ -140,6 +141,13 @@ monitor:* / tool:*       监控与工具
 - 每个写请求都要 CSRF 头；`/files` 下载走鉴权接口，文件不静态挂载；
 - 导入/导出复用列表权限（能看到列表就能导出同一份数据）；
 - 重设密码单独授权（能冒充任意用户，比改资料危险）。
+
+## 9.1 静态资源与 APK
+
+- 前端产物由后端托管：`/assets/*` 走静态文件，其余未匹配路径回落到 `index.html`（SPA 路由）。
+- Android 安装包放在 `<APP_WEB_DIR>/apk/`，由 `/apk/<文件名>` 直接下载，**不经过鉴权**：
+  部署后把文件丢进该目录即可生效，不需要重新构建前端，也不需要重启后端。
+  页面入口是 `/erp/android`，默认链接 `/apk/dafeiyu-erp.apk`；文件不存在时页面会提示未上传。
 
 ## 10. 内部接口
 
