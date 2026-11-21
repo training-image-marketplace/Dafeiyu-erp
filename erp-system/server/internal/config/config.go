@@ -136,7 +136,7 @@ func defaults() Config {
 			Host:                   "127.0.0.1",
 			Port:                   3306,
 			User:                   "root",
-			Name:                   "training_platform",
+			Name:                   "pt_erp",
 			MaxOpenConns:           30,
 			MaxIdleConns:           10,
 			ConnMaxLifetimeMinutes: 30,

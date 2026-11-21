@@ -873,6 +873,8 @@ func auditUnion(direction string) (string, error) {
 		JOIN erp_warehouses tw ON tw.id = t.to_warehouse_id
 		LEFT JOIN sys_users cu ON cu.id = t.created_by
 		LEFT JOIN sys_users au ON au.id = t.approved_by`
+	// 审核中心的状态筛选对 7 类单据必须口径一致：这里不能写死 status = 'submitted'，
+	// 否则盘点单只会在「待审核」里出现，切到「已通过/已驳回」就凭空消失。
 	stockChecks := `SELECT 'stock-check' AS bill_type, c.id AS bill_id, c.check_no AS bill_no,
 			w.name AS partner_name, w.name AS warehouse_name, 0 AS total_amount, c.status,
 			c.created_by, COALESCE(NULLIF(cu.nickname, ''), cu.username, '') AS creator_name,
@@ -882,7 +884,7 @@ func auditUnion(direction string) (string, error) {
 		JOIN erp_warehouses w ON w.id = c.warehouse_id
 		JOIN sys_users cu ON cu.id = c.created_by
 		LEFT JOIN sys_users au ON au.id = c.approved_by
-		WHERE c.status = 'submitted' AND ` + checkNetPredicate
+		WHERE ` + checkNetPredicate
 	switch direction {
 	case "in":
 		// 调拨与盘点差异各自按出/入方向进入对应待办，避免同一单重复出现两次。

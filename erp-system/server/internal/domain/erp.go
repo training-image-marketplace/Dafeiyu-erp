@@ -13,6 +13,51 @@ const (
 	BugOrphanCustomer = "BUG-006" // 删除客户后订单仍可见（预留）
 )
 
+// BugSwitch 是一条可注入的教学缺陷。
+//
+// Wired 为 false 表示只声明了常量、业务代码里还没有对应分支：打开也不会有任何变化。
+// 开关页必须把它和真正生效的缺陷区分开，否则做验收的人会以为「开关坏了」。
+type BugSwitch struct {
+	Code  string `json:"code"`
+	Name  string `json:"name"`
+	Area  string `json:"area"`
+	Wired bool   `json:"wired"`
+}
+
+// BugSwitches 是缺陷目录的唯一真源：开关页、内部接口与平台面板都读它。
+//
+// 新增缺陷 = 这里加一条 + 在业务里写 BugEnabled 分支 + 把 Wired 置 true。
+var BugSwitches = []BugSwitch{
+	{Code: BugAmountError, Name: "金额少算 1 分", Area: "purchase/sales", Wired: true},
+	{Code: BugNegativeStock, Name: "出库允许负库存", Area: "sales/transfer/return", Wired: true},
+	{Code: BugApproveSelf, Name: "允许自审自批", Area: "approve/reject", Wired: true},
+	{Code: BugEditCompleted, Name: "已完成单据仍可编辑", Area: "purchase/sales", Wired: true},
+	{Code: BugDuplicatePage, Name: "列表翻页重复第 1 页", Area: "list", Wired: false},
+	{Code: BugOrphanCustomer, Name: "删除客户后订单仍可见", Area: "customers/sales", Wired: false},
+}
+
+// WiredBugSwitches 只返回已接线的缺陷。平台开关面板只下发这些——
+// 把未接线的也下发，等于给平台一个点了没反应的开关。
+func WiredBugSwitches() []BugSwitch {
+	out := make([]BugSwitch, 0, len(BugSwitches))
+	for _, b := range BugSwitches {
+		if b.Wired {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// BugDeclared 判断缺陷码是否在目录里。用于挡住拼错的 bug_code 写进配置。
+func BugDeclared(code string) bool {
+	for _, b := range BugSwitches {
+		if b.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 // MenuSwitch 是一个可被平台关闭的业务菜单。
 //
 // Code 与网关（menuCodeOfPath）拦截时用的码完全一致；平台只认这两个字段，

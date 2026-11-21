@@ -1268,6 +1268,11 @@ func (h *ERPHandler) GetSwitches(c *gin.Context) {
 	httpx.Success(c, gin.H{"scope": scope, "scope_id": id, "config": cfg})
 }
 
+// ListBugSwitches 返回缺陷目录（含未接线项），给开关页渲染用。
+func (h *ERPHandler) ListBugSwitches(c *gin.Context) {
+	httpx.Success(c, gin.H{"list": domain.BugSwitches})
+}
+
 type putSwitchRequest struct {
 	BugCode string `json:"bug_code" binding:"required,max=32"`
 	Enabled bool   `json:"enabled"`
@@ -1278,6 +1283,12 @@ func (h *ERPHandler) SetBug(c *gin.Context) {
 	var req putSwitchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		httpx.FailBindError(c, err)
+		return
+	}
+	// 拼错的码写进配置后没有任何分支会读它，表现为「开关打开了却没变化」，
+	// 极难排查。目录里没有的码直接拒绝。
+	if !domain.BugDeclared(req.BugCode) {
+		httpx.Fail(c, http.StatusBadRequest, httpx.KeyInvalidParent)
 		return
 	}
 	scope, id := scopeFrom(c)

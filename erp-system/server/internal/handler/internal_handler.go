@@ -93,12 +93,9 @@ func (h *InternalHandler) Menus(c *gin.Context) {
 }
 
 func (h *InternalHandler) Bugs(c *gin.Context) {
-	httpx.Success(c, gin.H{"list": []gin.H{
-		{"code": domain.BugAmountError, "name": "金额少算 1 分", "area": "purchase/sales"},
-		{"code": domain.BugNegativeStock, "name": "出库允许负库存", "area": "sales"},
-		{"code": domain.BugApproveSelf, "name": "允许自审自批", "area": "purchase/sales"},
-		{"code": domain.BugEditCompleted, "name": "已完成单据仍可编辑", "area": "purchase/sales"},
-	}})
+	// 只下发已接线的缺陷：平台面板据此渲染勾选项，列出「打开也没反应」的码
+	// 会让老师以为平台下发失败。
+	httpx.Success(c, gin.H{"list": domain.WiredBugSwitches()})
 }
 
 func (h *InternalHandler) Health(c *gin.Context) {

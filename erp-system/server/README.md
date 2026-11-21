@@ -55,7 +55,7 @@ go run ./cmd/server                                # :8889
 
 ```bash
 export TEST_MYSQL_DSN='root:***@tcp(127.0.0.1:23306)/'
-go test ./... -count=1          # 207 个用例；未设置 DSN 时集成测试自动 skip
+go test ./... -count=1          # 211 个用例；未设置 DSN 时集成测试自动 skip
 ```
 
 每个用例建独立随机库、结束 DROP。

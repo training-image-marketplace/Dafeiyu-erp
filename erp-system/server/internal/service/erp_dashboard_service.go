@@ -67,7 +67,19 @@ func (s *ERPService) Dashboard(ctx context.Context) (domain.Dashboard, error) {
 	if err != nil {
 		return domain.Dashboard{}, fmt.Errorf("list outbound pending: %w", err)
 	}
-	pending := append(inList, outList...)
+	// 调拨单按设计同时属于入库与出库两条待办队列，直接拼接会让同一张单
+	// 出现两次。首页按「单据」展示，必须先去重再排序截断：前端对这个列表
+	// 用 bill_type+bill_id 做 keyed each，重复 key 会抛错、整个仪表盘停在加载态。
+	seen := make(map[string]struct{}, len(inList)+len(outList))
+	pending := make([]domain.AuditBill, 0, len(inList)+len(outList))
+	for _, b := range append(inList, outList...) {
+		key := fmt.Sprintf("%s-%d", b.BillType, b.BillID)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		pending = append(pending, b)
+	}
 	sort.SliceStable(pending, func(i, j int) bool {
 		a, b := pending[i].SubmittedAt, pending[j].SubmittedAt
 		if a == nil {

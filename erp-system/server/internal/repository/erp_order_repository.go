@@ -111,7 +111,8 @@ func (r *ERPOrderRepository) SubmitStockAdjustment(ctx context.Context, id, oper
 }
 
 func (r *ERPOrderRepository) DeleteDraftStockAdjustment(ctx context.Context, id, operatorID int64, operatorName string) error {
-	return r.deleteDraft(ctx, "erp_stock_adjustments", "", "stock-adjustment", id, operatorID, operatorName)
+	// 库存调整没有明细表，itemTable/itemColumn 传空串跳过删明细。
+	return r.deleteDraft(ctx, "erp_stock_adjustments", "", "", "stock-adjustment", id, operatorID, operatorName)
 }
 
 func (r *ERPOrderRepository) AuditStockAdjustment(ctx context.Context, id, operatorID int64, operatorName, comment string, allowSelf, allowNegative, pass bool) error {
@@ -342,7 +343,7 @@ func (r *ERPOrderRepository) SubmitStockCheck(ctx context.Context, id, operatorI
 }
 
 func (r *ERPOrderRepository) DeleteDraftStockCheck(ctx context.Context, id, operatorID int64, operatorName string) error {
-	return r.deleteDraft(ctx, "erp_stock_checks", "erp_stock_check_items", "stock-check", id, operatorID, operatorName)
+	return r.deleteDraft(ctx, "erp_stock_checks", "erp_stock_check_items", "check_id", "stock-check", id, operatorID, operatorName)
 }
 
 // AuditStockCheck 审核盘点单：通过时按差异生成「已审核」的库存调整单并入账，
@@ -579,7 +580,7 @@ func (r *ERPOrderRepository) SubmitTransfer(ctx context.Context, id, operatorID 
 }
 
 func (r *ERPOrderRepository) DeleteDraftTransfer(ctx context.Context, id, operatorID int64, operatorName string) error {
-	return r.deleteDraft(ctx, "erp_transfers", "erp_transfer_items", "transfer", id, operatorID, operatorName)
+	return r.deleteDraft(ctx, "erp_transfers", "erp_transfer_items", "transfer_id", "transfer", id, operatorID, operatorName)
 }
 
 // CompleteTransfer 完成调拨：从调出仓扣减、向调入仓增加，同一事务写两条流水。
@@ -849,7 +850,7 @@ func (r *ERPOrderRepository) WithdrawPurchase(ctx context.Context, id, operatorI
 
 // DeleteDraftPurchase 物理删除草稿单及其明细；操作记录保留作审计痕迹。
 func (r *ERPOrderRepository) DeleteDraftPurchase(ctx context.Context, id, operatorID int64, operatorName string) error {
-	return r.deleteDraft(ctx, "erp_purchase_orders", "erp_purchase_order_items", "purchase", id, operatorID, operatorName)
+	return r.deleteDraft(ctx, "erp_purchase_orders", "erp_purchase_order_items", "order_id", "purchase", id, operatorID, operatorName)
 }
 
 // ReceivePurchase 入库：逐行加库存 + 写流水，最后把单据置为 completed。
@@ -1087,7 +1088,7 @@ func (r *ERPOrderRepository) WithdrawSales(ctx context.Context, id, operatorID i
 
 // DeleteDraftSales 物理删除草稿销售单。
 func (r *ERPOrderRepository) DeleteDraftSales(ctx context.Context, id, operatorID int64, operatorName string) error {
-	return r.deleteDraft(ctx, "erp_sales_orders", "erp_sales_order_items", "sales", id, operatorID, operatorName)
+	return r.deleteDraft(ctx, "erp_sales_orders", "erp_sales_order_items", "order_id", "sales", id, operatorID, operatorName)
 }
 
 // ShipSales 出库。allowNegative 为 true 时不拦负库存（BUG-002）。
@@ -1273,9 +1274,14 @@ func (r *ERPOrderRepository) reject(
 //
 // 操作记录留在 erp_bill_operations 里（bill_id 指向已删除的行），
 // 目的是保留「谁在什么时候删了哪张单」的痕迹；单据本身已不可访问。
+//
+// itemTable/itemColumn 必须成对给出：各单据的明细表外键名并不统一
+// （采购/销售是 order_id，调拨是 transfer_id，盘点是 check_id）。
+// 传错列名会让 DELETE 报 1054 未知列，接口表现为 500 而不是删掉草稿。
+// 没有明细表的单据（库存调整）两个参数都传空串，跳过删明细这一步。
 func (r *ERPOrderRepository) deleteDraft(
 	ctx context.Context,
-	table, itemTable, billType string,
+	table, itemTable, itemColumn, billType string,
 	id, operatorID int64,
 	operatorName string,
 ) error {
@@ -1296,8 +1302,10 @@ func (r *ERPOrderRepository) deleteDraft(
 	if status != "draft" {
 		return domain.ErrInvalidState
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM `+itemTable+` WHERE order_id = ?`, id); err != nil {
-		return err
+	if itemTable != "" {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+itemTable+` WHERE `+itemColumn+` = ?`, id); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE id = ?`, id); err != nil {
 		return err

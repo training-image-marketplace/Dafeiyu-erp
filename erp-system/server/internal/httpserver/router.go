@@ -326,6 +326,8 @@ func NewRouter(deps Deps) (*gin.Engine, *RouteTable, error) {
 
 	// 开关（ERP 自己也有一份只读/调试入口）
 	reg.protect(http.MethodGet, "/switches", perm.ERPSwitchList, deps.ERP.GetSwitches)
+	// 缺陷目录与当前配置分开：目录是静态声明，配置才随开关变化。
+	reg.protect(http.MethodGet, "/switches/bugs", perm.ERPSwitchList, deps.ERP.ListBugSwitches)
 	reg.protect(http.MethodPost, "/switches/bug", perm.ERPSwitchEdit, deps.ERP.SetBug)
 	reg.protect(http.MethodGet, "/audit/switches", perm.ERPSwitchList, deps.ERP.AuditSwitches)
 

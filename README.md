@@ -87,7 +87,7 @@ adb reverse tcp:8889 tcp:8889     # 模拟器/真机最稳的联调方式
 ```bash
 export TEST_MYSQL_DSN='root:***@tcp(127.0.0.1:23306)/'
 
-cd erp-system/server && go test ./... -count=1          # 207 个用例，DB 用例自动建随机库
+cd erp-system/server && go test ./... -count=1          # 211 个用例，DB 用例自动建随机库
 cd erp-system/web    && npm run check && npm run build  # svelte-check + 构建
 cd erp-system/web    && npx playwright test             # e2e（需先起后端）
 ```

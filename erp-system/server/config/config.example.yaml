@@ -46,7 +46,7 @@ internal_token: ""
 
 database:
   # MySQL 8.0.16+。库要先建好（应用只跑迁移，不负责 CREATE DATABASE）：
-  #   CREATE DATABASE training_platform
+  #   CREATE DATABASE pt_erp
   #     DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
   host: 127.0.0.1
   port: 23306
@@ -54,7 +54,7 @@ database:
   # 生产必须用环境变量 APP_DB_PASSWORD 注入，不要把真实密码写进这里。
   # 本文件在版本库里，config.yaml 才是每个部署自己的（已 gitignore）。
   password: ""
-  name: pt_training
+  name: pt_erp
 
   # 连接池。SQLite 时代固定 4 条（单写者模型），MySQL 没有这个限制；
   # 但也不是越大越好，默认 30 对单实例足够。
