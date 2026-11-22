@@ -1,5 +1,6 @@
 package com.kong.erp.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,8 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.kong.erp.R
 import com.kong.erp.data.ApiException
 import com.kong.erp.data.Page
 import java.time.Instant
@@ -97,10 +100,29 @@ fun SearchField(
     )
 }
 
+/**
+ * 全屏加载：吉祥物「赶路」+ 上下浮动。
+ *
+ * 用动画而不是转圈：这是在给用户一个「正在跑过去」的暗示，
+ * 比一个无意义的 spinner 更容易让人接受等待。
+ * 无障碍：图片是装饰性的（contentDescription = null），状态由下面的文字承担。
+ */
 @Composable
-fun LoadingBox(modifier: Modifier = Modifier) {
+fun LoadingBox(modifier: Modifier = Modifier, text: String = "加载中…") {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(R.drawable.whale_running),
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+            )
+            Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 
@@ -114,10 +136,28 @@ fun ErrorBox(message: String, onRetry: () -> Unit) {
     }
 }
 
+/**
+ * 列表空态：吉祥物「脑袋空白」+ 一行说明。
+ *
+ * 空态是最容易被忽略、也最容易被用户看见的地方：一条冷冰冰的「暂无数据」
+ * 会让人怀疑是不是坏了，一张发呆的鲸鱼会让人知道「确实没有，不是出错」。
+ */
 @Composable
 fun EmptyHint(text: String) {
-    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(R.drawable.whale_blank),
+                contentDescription = null,
+                modifier = Modifier.size(56.dp),
+            )
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
     }
 }
 

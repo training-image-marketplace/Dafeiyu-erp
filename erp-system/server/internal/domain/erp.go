@@ -86,6 +86,92 @@ var MenuSwitches = []MenuSwitch{
 	{Code: "audit", Name: "审核中心", NameEN: "Audit center"},
 }
 
+// SwitchItem 是开关组里的一项：平台只按「组 → code」透传，语义由本系统决定。
+type SwitchItem struct {
+	Code   string `json:"code"`
+	Name   string `json:"name"`
+	NameEN string `json:"name_en,omitempty"`
+	Area   string `json:"area,omitempty"`
+}
+
+// SwitchGroup 是被测系统自报的一组可切换项（GET /internal/switches/schema）。
+//
+// Default 是「清单里有、但没配置过」时的状态：缺陷默认关、菜单默认开。
+// 平台不内置任何组名与 code，换一个镜像就换一份清单。
+type SwitchGroup struct {
+	Code    string       `json:"code"`
+	Name    string       `json:"name"`
+	NameEN  string       `json:"name_en"`
+	Default *bool        `json:"default,omitempty"`
+	Items   []SwitchItem `json:"items"`
+}
+
+// SwitchSchema 是平台面板渲染开关需要的全部信息。
+//
+// 分三组而不是「缺陷 / 菜单」两组：教师按业务域找开关比按实现方式找更符合直觉。
+func SwitchSchema() []SwitchGroup {
+	off, on := false, true
+
+	// 缺陷按 Area 归到三个业务域
+	areaGroup := func(area string) string {
+		switch area {
+		case "purchase/sales", "sales/transfer/return", "purchase", "sales":
+			return "bugs-docs"
+		case "approve/reject":
+			return "bugs-approval"
+		case "customers/sales", "customers":
+			return "bugs-master"
+		case "list":
+			return "bugs-list"
+		default:
+			return "bugs-other"
+		}
+	}
+
+	groups := []SwitchGroup{
+		{Code: "bugs-docs", Name: "单据类缺陷", NameEN: "Document defects", Default: &off},
+		{Code: "bugs-approval", Name: "审批类缺陷", NameEN: "Approval defects", Default: &off},
+		{Code: "bugs-stock", Name: "库存类缺陷", NameEN: "Stock defects", Default: &off},
+		{Code: "bugs-master", Name: "主数据类缺陷", NameEN: "Master-data defects", Default: &off},
+		{Code: "bugs-list", Name: "列表类缺陷", NameEN: "List defects", Default: &off},
+		{Code: "bugs-other", Name: "其它缺陷", NameEN: "Other defects", Default: &off},
+		{Code: "menus", Name: "可关闭菜单", NameEN: "Closable menus", Default: &on},
+	}
+
+	index := make(map[string]int, len(groups))
+	for i, g := range groups {
+		index[g.Code] = i
+	}
+
+	for _, b := range WiredBugSwitches() {
+		code := areaGroup(b.Area)
+		// 库存缺陷单独成组，便于「只练库存」的场景一键打开
+		if b.Code == BugNegativeStock {
+			code = "bugs-stock"
+		}
+		if i, ok := index[code]; ok {
+			groups[i].Items = append(groups[i].Items, SwitchItem{
+				Code: b.Code, Name: b.Name, Area: b.Area,
+			})
+		}
+	}
+
+	for _, m := range MenuSwitches {
+		groups[index["menus"]].Items = append(groups[index["menus"]].Items, SwitchItem{
+			Code: m.Code, Name: m.Name, NameEN: m.NameEN,
+		})
+	}
+
+	// 丢掉没有项的组：平台面板里出现空组只会让人困惑
+	out := groups[:0]
+	for _, g := range groups {
+		if len(g.Items) > 0 {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
 // SwitchConfig 是某作用域下的一份开关配置。
 //
 // 缺失的键按「关闭」处理：默认不注入缺陷，避免新环境一上来就是坏的。

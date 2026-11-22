@@ -335,6 +335,8 @@ func NewRouter(deps Deps) (*gin.Engine, *RouteTable, error) {
 	internal := r.Group("/internal", handler.RequireInternalToken(deps.InternalToken))
 	internal.GET("/switches", deps.Internal.GetSwitches)
 	internal.PUT("/switches", deps.Internal.PutSwitches)
+	// 新契约：自报开关组与项，平台按此渲染面板（老镜像可只提供 bugs/menus）
+	internal.GET("/switches/schema", deps.Internal.SwitchSchema)
 	internal.GET("/bugs", deps.Internal.Bugs)
 	internal.GET("/menus", deps.Internal.Menus)
 	internal.GET("/health", deps.Internal.Health)

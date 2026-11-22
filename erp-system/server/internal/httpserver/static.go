@@ -50,6 +50,14 @@ func MountStatic(r *gin.Engine, webDir string) error {
 			r.Static("/apk", apkDir)
 			log.Printf("从 %s 托管 APK 下载", apkDir)
 		}
+
+		// 品牌插画（吉祥物）：不在 assets/ 下，不单独挂载会落到 SPA fallback，
+		// 浏览器拿到 index.html 当图片解析，表现为「图片不显示且不报错」。
+		brandDir := filepath.Join(webDir, "brand")
+		if _, err := os.Stat(brandDir); err == nil {
+			r.Static("/brand", brandDir)
+			log.Printf("从 %s 托管品牌素材", brandDir)
+		}
 	}
 
 	r.NoRoute(func(c *gin.Context) {
@@ -62,7 +70,7 @@ func MountStatic(r *gin.Engine, webDir string) error {
 		// 回落到 index.html 就成了「200 + HTML」——下载页据此判断安装包已上传，
 		// 用户点下载拿到的是一个网页。缺失的安装包必须是 404。
 		if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, AssetsPrefix) ||
-			strings.HasPrefix(path, "/apk/") {
+			strings.HasPrefix(path, "/apk/") || strings.HasPrefix(path, "/brand/") {
 			httpx.Fail(c, http.StatusNotFound, httpx.KeyNotFound)
 			return
 		}

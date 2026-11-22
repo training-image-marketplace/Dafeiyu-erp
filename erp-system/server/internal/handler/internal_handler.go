@@ -98,6 +98,15 @@ func (h *InternalHandler) Bugs(c *gin.Context) {
 	httpx.Success(c, gin.H{"list": domain.WiredBugSwitches()})
 }
 
+// SwitchSchema 自报开关组与项。
+//
+// 平台只按「组 → code」透传与下发，不内置任何组名：所以这里加一组、改个名字，
+// 平台侧一行代码都不用动。分三组是给教师看的（单据 / 审批 / 库存 / 主数据 / 菜单），
+// 不是按实现方式分的。
+func (h *InternalHandler) SwitchSchema(c *gin.Context) {
+	httpx.Success(c, gin.H{"list": domain.SwitchSchema()})
+}
+
 func (h *InternalHandler) Health(c *gin.Context) {
 	httpx.Success(c, gin.H{"status": "up"})
 }

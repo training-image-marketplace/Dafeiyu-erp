@@ -90,9 +90,16 @@
   <section class="relative z-10 hidden w-[55%] flex-col justify-between px-12 py-12 lg:flex xl:px-16 xl:py-14">
     <div class="login-rise flex items-center gap-3">
       <span
-        class="flex size-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-500/25"
+        class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white p-1 shadow-lg shadow-emerald-500/20 ring-1 ring-white/20"
       >
-        <Boxes class="size-5 text-white" aria-hidden="true" />
+        <img
+          src="/brand/studying.webp"
+          srcset="/brand/studying.webp 1x, /brand/studying@2x.webp 2x"
+          alt=""
+          aria-hidden="true"
+          class="size-full object-contain"
+          draggable="false"
+        />
       </span>
       <div>
         <p class="text-sm font-semibold tracking-wide text-white">{t('app.name')}</p>
@@ -142,6 +149,17 @@
     </div>
 
     <div class="login-rise login-delay-2 flex items-center gap-4">
+      <!-- 吉祥物贴纸：与平台登录页保持同一处品牌签名 -->
+      <img
+        src="/brand/studying.webp"
+        srcset="/brand/studying.webp 1x, /brand/studying@2x.webp 2x"
+        alt=""
+        aria-hidden="true"
+        width="56"
+        height="56"
+        draggable="false"
+        class="size-14 shrink-0 select-none rounded-2xl bg-white object-contain p-0.5 shadow-lg shadow-black/25 ring-1 ring-white/15"
+      />
       <div class="h-px w-10 bg-white/15"></div>
       <p class="text-[11px] font-medium tracking-[0.16em] text-white/35">{t('login.heroFoot')}</p>
     </div>
