@@ -68,9 +68,9 @@ func (h *InternalHandler) GetSwitches(c *gin.Context) {
 }
 
 type internalSwitchRequest struct {
-	Scope   string              `json:"scope" binding:"required,oneof=all group personal"`
-	ScopeID int64               `json:"scope_id" binding:"gte=0"`
-	Config  domain.SwitchConfig `json:"config" binding:"required"`
+	Scope   string                     `json:"scope" binding:"required,oneof=all group personal"`
+	ScopeID int64                      `json:"scope_id" binding:"gte=0"`
+	Config  map[string]map[string]bool `json:"config" binding:"required"`
 }
 
 func (h *InternalHandler) PutSwitches(c *gin.Context) {
@@ -79,7 +79,23 @@ func (h *InternalHandler) PutSwitches(c *gin.Context) {
 		httpx.FailBindError(c, err)
 		return
 	}
-	if err := h.switches.Set(c.Request.Context(), req.Scope, req.ScopeID, req.Config); err != nil {
+	// Schema group names are a presentation contract. Persist the canonical bugs/menus
+	// structure used by business checks, while accepting legacy bugs payloads.
+	cfg := domain.SwitchConfig{Bugs: map[string]bool{}, Menus: req.Config["menus"]}
+	for code, on := range req.Config["bugs"] {
+		cfg.Bugs[code] = on
+	}
+	for _, group := range domain.SwitchSchema() {
+		if group.Code == "menus" {
+			continue
+		}
+		for _, item := range group.Items {
+			if on, ok := req.Config[group.Code][item.Code]; ok {
+				cfg.Bugs[item.Code] = on
+			}
+		}
+	}
+	if err := h.switches.Set(c.Request.Context(), req.Scope, req.ScopeID, cfg); err != nil {
 		httpx.FailFromError(c, err)
 		return
 	}

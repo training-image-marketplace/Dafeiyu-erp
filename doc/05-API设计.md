@@ -154,7 +154,8 @@ monitor:* / tool:*       监控与工具
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/internal/switches?scope=&scope_id=` | 读当前生效开关 |
-| PUT | `/internal/switches` | 覆盖某作用域开关 |
+| PUT | `/internal/switches` | 覆盖某作用域开关，接受 schema 上报的分组格式，并兼容旧 `bugs` / `menus` 格式；同一缺陷的 schema 分组值优先 |
+| GET | `/internal/switches/schema` | 自报开关组、默认值与已接线项；平台据此动态渲染勾选面板 |
 | GET | `/internal/bugs` | 缺陷清单 |
 | GET | `/internal/menus` | 可关闭菜单清单（`[{code,name,name_en}]`），平台据此渲染开关面板 |
 | GET | `/internal/health` | 存活 |
